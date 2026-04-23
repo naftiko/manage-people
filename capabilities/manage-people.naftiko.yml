@@ -1,0 +1,107 @@
+naftiko: "1.0.0-alpha1"
+
+info:
+  title: Manage People
+  description: >
+    Manages the Naftiko people network — customers, partners, community members,
+    and influencers — in context/people/people.yml using Schema.org Person format.
+    Syncs upstream to the Naftiko People Network database in Notion (GTM Home)
+    via the sync-people-network-to-notion skill.
+
+    Local YAML is the source of truth. Each person can have a long-form profile
+    markdown in context/people/people/ referenced by the profile_file field.
+
+    Distinct from manage-conversations (narrower — only conversation participants).
+
+    Skill: .claude/skills/sync-people-network-to-notion/
+
+capability:
+  consumes:
+    - namespace: notion
+      type: http
+      baseUri: "https://api.notion.com/v1"
+      authentication:
+        type: bearer
+        token: "{{NOTION_SECRET}}"
+      resources:
+        - name: people-database
+          path: "/databases/{database_id}/query"
+          operations:
+            - name: query-people
+              method: POST
+              inputParameters:
+                - name: database_id
+                  in: path
+                  type: string
+                  required: true
+                  description: "Notion People Network database ID"
+
+        - name: pages
+          path: "/pages"
+          operations:
+            - name: create-person-page
+              method: POST
+              inputParameters:
+                - name: parent
+                  in: body
+                  type: object
+                  required: true
+                - name: properties
+                  in: body
+                  type: object
+                  required: true
+
+        - name: page
+          path: "/pages/{page_id}"
+          operations:
+            - name: update-person-page
+              method: PATCH
+              inputParameters:
+                - name: page_id
+                  in: path
+                  type: string
+                  required: true
+                - name: properties
+                  in: body
+                  type: object
+                  required: true
+
+  exposes:
+    - type: mcp
+      address: "0.0.0.0"
+      port: 3021
+      namespace: manage-people
+      description: "People network tools — list, add, and sync the broader Naftiko people network to Notion"
+      tools:
+        - name: list-people
+          description: "List all people in the Naftiko People Network database from Notion"
+          hints:
+            readOnly: true
+            destructive: false
+            idempotent: true
+          inputParameters: []
+          call: notion.query-people
+          with:
+            database_id: "34b4adce-3d02-8164-8ad8-e9f79a8d4d7a"
+          outputParameters:
+            - type: object
+              properties:
+                results:
+                  type: array
+                  mapping: "$.results"
+                next_cursor:
+                  type: string
+                  mapping: "$.next_cursor"
+
+        - name: sync-people
+          description: "Sync context/people/people.yml to the Notion People Network database — upserts by name"
+          hints:
+            readOnly: false
+            destructive: false
+            idempotent: true
+          inputParameters: []
+          call: notion.create-person-page
+          with: {}
+          outputParameters:
+            - type: object
+              mapping: "$."
