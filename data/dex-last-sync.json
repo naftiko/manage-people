@@ -1,0 +1,41 @@
+{
+  "ran_at": "2026-04-24T00:08:19Z",
+  "total_dex_contacts": 11680,
+  "processed": 11680,
+  "added": 11566,
+  "updated": 114,
+  "dedupe_hits": {
+    "identifier": 0,
+    "linkedin": 23,
+    "name_org": 91
+  },
+  "shards_written": [
+    "_other",
+    "a",
+    "b",
+    "c",
+    "d",
+    "e",
+    "f",
+    "g",
+    "h",
+    "i",
+    "j",
+    "k",
+    "l",
+    "m",
+    "n",
+    "o",
+    "p",
+    "q",
+    "r",
+    "s",
+    "t",
+    "u",
+    "v",
+    "w",
+    "x",
+    "y",
+    "z"
+  ]
+}

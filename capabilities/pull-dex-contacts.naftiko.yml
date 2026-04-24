@@ -1,0 +1,280 @@
+# Spec-Driven Integration notes: this capability wraps the Dex personal CRM REST API,
+# reshapes each contact into a lean schema.org Person payload via outputParameters with
+# JSONPath mapping, and exposes the surface across MCP (http + stdio), Agent Skills, and REST.
+# The sync_dex_contacts.py runner uses the list-contacts + get-contact operations to paginate
+# all contacts and merge them into context/people/{a-z}.yml shards.
+
+naftiko: "1.0.0-alpha1"
+
+info:
+  title: Pull Dex Contacts
+  label: "Dex Personal CRM — Contacts Sync"
+  description: >
+    Pulls all contacts from the Dex personal CRM API (https://api.prod.getdex.com),
+    normalizes them into schema.org Person entries, and merges them into the sharded
+    people store at context/people/{a-z}.yml. Also exposes list/get/count operations
+    as MCP tools, Agent Skills, and REST endpoints so copilots and services can
+    discover Dex contacts directly.
+  tags:
+    - Dex
+    - Contacts
+    - Personal CRM
+    - People
+    - Naftiko
+  created: "2026-04-23"
+  modified: "2026-04-23"
+
+binds:
+  - namespace: env
+    keys:
+      DEX_API_KEY: DEX_API_KEY
+
+capability:
+  consumes:
+    - namespace: dex
+      type: http
+      baseUri: "https://api.prod.getdex.com"
+      authentication:
+        type: bearer
+        token: "{{DEX_API_KEY}}"
+      resources:
+        - name: contacts
+          path: "/v1/contacts"
+          operations:
+            - name: list-contacts
+              method: GET
+              description: "List contacts (cursor-paginated, 500 per page). Set cursor to fetch next page."
+              inputParameters:
+                - name: limit
+                  in: query
+                  type: integer
+                  required: false
+                  description: "Page size (default 500)"
+                - name: cursor
+                  in: query
+                  type: string
+                  required: false
+                  description: "Pagination cursor from prior response nextCursor"
+
+        - name: contact
+          path: "/v1/contacts/{id}"
+          operations:
+            - name: get-contact
+              method: GET
+              description: "Fetch a single contact by Dex UUID"
+              inputParameters:
+                - name: id
+                  in: path
+                  type: string
+                  required: true
+                  description: "Dex contact UUID"
+
+        - name: contacts-count
+          path: "/v1/contacts/count"
+          operations:
+            - name: count-contacts
+              method: GET
+              description: "Return the total number of contacts for the authenticated user"
+
+  exposes:
+    - type: mcp
+      port: 9090
+      namespace: manage-dex-mcp
+      transport: http
+      description: "MCP server (HTTP) exposing Dex contacts operations to remote copilots"
+      tools:
+        - name: list-dex-contacts
+          description: "List Dex contacts as lean schema.org-shaped Person records (one page)"
+          hints:
+            readOnly: true
+            destructive: false
+            idempotent: true
+          call: dex.list-contacts
+          inputParameters:
+            - name: limit
+              type: integer
+              required: false
+              description: "Page size (default 500)"
+              mapping: "queryParameters.limit"
+            - name: cursor
+              type: string
+              required: false
+              description: "Pagination cursor from a prior response"
+              mapping: "queryParameters.cursor"
+          outputParameters:
+            - type: object
+              properties:
+                - name: items
+                  type: array
+                  mapping: "$.data.items"
+                  items:
+                    type: object
+                    properties:
+                      - name: id
+                        type: string
+                        mapping: "$.id"
+                      - name: name
+                        type: string
+                        mapping: "$.full_name"
+                      - name: firstName
+                        type: string
+                        mapping: "$.first_name"
+                      - name: lastName
+                        type: string
+                        mapping: "$.last_name"
+                      - name: jobTitle
+                        type: string
+                        mapping: "$.job_title"
+                      - name: company
+                        type: string
+                        mapping: "$.company"
+                      - name: linkedin
+                        type: string
+                        mapping: "$.linkedin"
+                      - name: twitter
+                        type: string
+                        mapping: "$.twitter"
+                      - name: website
+                        type: string
+                        mapping: "$.website"
+                      - name: description
+                        type: string
+                        mapping: "$.description"
+                - name: nextCursor
+                  type: string
+                  mapping: "$.data.nextCursor"
+
+        - name: get-dex-contact
+          description: "Fetch a single Dex contact by UUID"
+          hints:
+            readOnly: true
+            destructive: false
+            idempotent: true
+          call: dex.get-contact
+          inputParameters:
+            - name: id
+              type: string
+              required: true
+              description: "Dex contact UUID"
+              mapping: "pathParameters.id"
+          outputParameters:
+            - type: object
+              properties:
+                - name: id
+                  type: string
+                  mapping: "$.data.id"
+                - name: name
+                  type: string
+                  mapping: "$.data.full_name"
+                - name: jobTitle
+                  type: string
+                  mapping: "$.data.job_title"
+                - name: company
+                  type: string
+                  mapping: "$.data.company"
+                - name: linkedin
+                  type: string
+                  mapping: "$.data.linkedin"
+                - name: description
+                  type: string
+                  mapping: "$.data.description"
+
+        - name: count-dex-contacts
+          description: "Return the total number of contacts in Dex"
+          hints:
+            readOnly: true
+            destructive: false
+            idempotent: true
+          call: dex.count-contacts
+          outputParameters:
+            - type: object
+              properties:
+                - name: count
+                  type: integer
+                  mapping: "$.data.count"
+
+    - type: mcp
+      namespace: manage-dex-mcp-stdio
+      transport: stdio
+      description: "MCP server (stdio) — same tools as HTTP, for local IDE/agent clients"
+      tools:
+        - name: list-dex-contacts
+          description: "List Dex contacts as lean schema.org-shaped Person records (one page)"
+          hints:
+            readOnly: true
+            destructive: false
+            idempotent: true
+          call: dex.list-contacts
+          inputParameters:
+            - name: limit
+              type: integer
+              required: false
+              mapping: "queryParameters.limit"
+            - name: cursor
+              type: string
+              required: false
+              mapping: "queryParameters.cursor"
+        - name: get-dex-contact
+          description: "Fetch a single Dex contact by UUID"
+          hints:
+            readOnly: true
+            destructive: false
+            idempotent: true
+          call: dex.get-contact
+          inputParameters:
+            - name: id
+              type: string
+              required: true
+              mapping: "pathParameters.id"
+        - name: count-dex-contacts
+          description: "Return the total number of contacts in Dex"
+          hints:
+            readOnly: true
+            destructive: false
+            idempotent: true
+          call: dex.count-contacts
+
+    - type: skill
+      port: 10090
+      namespace: manage-dex-skill
+      description: "Agent Skills surface — same tool set as MCP for agent frameworks"
+      tools:
+        - name: list-dex-contacts
+          description: "List Dex contacts as lean schema.org-shaped Person records (one page)"
+          hints:
+            readOnly: true
+            destructive: false
+            idempotent: true
+          call: dex.list-contacts
+        - name: get-dex-contact
+          description: "Fetch a single Dex contact by UUID"
+          hints:
+            readOnly: true
+            destructive: false
+            idempotent: true
+          call: dex.get-contact
+        - name: count-dex-contacts
+          description: "Return the total number of contacts in Dex"
+          hints:
+            readOnly: true
+            destructive: false
+            idempotent: true
+          call: dex.count-contacts
+
+    - type: rest
+      port: 8090
+      basePath: "/api/dex"
+      description: "REST endpoints for traditional clients"
+      endpoints:
+        - method: GET
+          path: "/contacts"
+          description: "List contacts (paginated)"
+          call: dex.list-contacts
+        - method: GET
+          path: "/contacts/{id}"
+          description: "Get a single contact"
+          call: dex.get-contact
+        - method: GET
+          path: "/contacts/count"
+          description: "Count total contacts"
+          call: dex.count-contacts
